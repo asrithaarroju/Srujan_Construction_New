@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Outdoor Data Visualization</title>
+    <!-- Add Plotly.js library -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- Add styling -->
+    <style>
+      body {
+        font-family: "Roboto", sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f3f3f3;
+      }
+      .plot-container {
+        border: 2px solid #ddd;
+        border-radius: 10px;
+        background-color: rgb(255, 255, 255);
+        margin: 20px;
+      }
+      h1 {
+        color: #f6f7f8;
+        text-align: center;
+      }
+
+      /* Responsive styles */
+      @media only screen and (max-width: 600px) {
+        .plot-container {
+          margin: 10px;
+        }
+      }
+
+      @media only screen and (min-width: 601px) {
+        .plot-container {
+          margin: 15px;
+        }
+      }
+
+      .last-timestamp {
+        text-align: center;
+        margin-top: 10px;
+        font-size: 14px;
+      }
+
+      .legend-container {
+        position: absolute;
+        top: 50px;
+        right: 10px;
+        background-color: rgba(255, 255, 255, 0.7);
+        padding: 10px;
+        border-radius: 5px;
+        font-size: 14px;
+      }
+
+      .legend-item {
+        margin-bottom: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Plotly Plot Container -->
+    <div id="mergedPlot1" class="plot-container"></div>
+    <div id="mergedPlot2" class="plot-container"></div>
+    <div id="mergedPlot3" class="plot-container"></div>
+    <div id="mergedPlot4" class="plot-container"></div>
+    <!-- <div id="mergedPlot5" class="plot-container"></div> -->
+
+    <!-- Script for fetching and plotting data -->
+    <script>
+      // Function to fetch and plot data for a given channel
+      function fetchDataAndPlot(channelId, apiKey, location, field) {
+        const url = `https://api.thingspeak.com/channels/${channelId}/feeds.json?api_key=${apiKey}&results=10000`;
+
+        return fetch(url)
+          .then((response) => response.json())
+          .then((data) => {
+            const feeds = data.feeds;
+
+            // Define start date and filter data from that date onwards
+            const startDate = new Date("2025-08-27T00:00:00Z");
+            const filteredFeeds = feeds.filter(
+              (feed) => new Date(feed.created_at) >= startDate
+            );
+
+            // Group data into 5-second intervals
+            const resampleInterval = 5000; // 5 seconds in milliseconds
+            let groupedData = {};
+            filteredFeeds.forEach((feed) => {
+              const timestamp = new Date(feed.created_at).getTime();
+              const interval =
+                Math.floor(timestamp / resampleInterval) * resampleInterval;
+
+              if (!groupedData[interval]) {
+                groupedData[interval] = [];
+              }
+              groupedData[interval].push(parseFloat(feed[field]));
+            });
+
+            // Create resampled timestamps and values
+            const timestamps = Object.keys(groupedData).map((interval) => {
+              const date = new Date(parseInt(interval));
+              // Adjust for IST (UTC +5:30)
+              const istDate = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
+              return istDate.toISOString().slice(0, 19).replace("T", " ");
+            });
+
+            const values = Object.values(groupedData).map(
+              (group) =>
+                group.reduce((sum, value) => sum + value, 0) / group.length
+            );
+
+            // Create Plotly trace for the specified field
+            return {
+              x: timestamps,
+              y: values,
+              name: `${location}`,
+              type: "line",
+            };
+          })
+          .catch((error) =>
+            console.error(`Error fetching data for Channel ${location}:`, error)
+          );
+      }
+
+      // Updated ThingSpeak channels
+      const channelIds = [
+        { id: "3045185", apiKey: "EIJUOIHKF8RZK3KA", label: "Node 1" },
+        { id: "3045188", apiKey: "B1YBO3CROCZC02GV", label: "Node 2" },
+        { id: "3045189", apiKey: "DROY0BNP5A20USMC", label: "Node 3" },
+        { id: "3045192", apiKey: "MI3XQDOQ6WXJKB3P", label: "Node 4" },
+        // { id: "944545", apiKey: "L0T1ZU83RF0GK9V7", label: "Library"},
+        // { id: "944798", apiKey: "8YB4CCP2H3ULN2TW", label: "FSQ"},
+        // { id: "945028", apiKey: "FZFLE7SUCGYRYIBW", label: "Football Ground"},
+        // { id: "947311", apiKey: "60NLXBD7BWW10LRV", label: "T-Hub"},
+        // { id: "1099442", apiKey: "ZOX2IGXJYFIRESI3", label: "Pump House 3"},
+        // { id: "2266784", apiKey: "103XV3U11MJZBZ5P", label: "Pump House 4"},
+      ];
+
+      // Fetch data for Temperature (field1)
+      const promises1 = channelIds.map((channel) =>
+        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field1")
+      );
+
+      Promise.all(promises1)
+        .then((traces) => {
+          const layout = {
+            title: "Outdoor Data - Temperature (°C)",
+            xaxis: { title: "Timestamp", type: "category" },
+            yaxis: { title: "Values", range: [0, 75], tick0: 0, dtick: 25 },
+            showlegend: true,
+            height: 750,
+            width: 1250,
+            xaxis: { rangeslider: { visible: true } },
+          };
+          Plotly.newPlot("mergedPlot1", traces, layout);
+        })
+        .catch((error) => console.error("Error fetching data:", error));
+
+      // Fetch data for Humidity (field2)
+      const promises2 = channelIds.map((channel) =>
+        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field2")
+      );
+
+      Promise.all(promises2)
+        .then((traces) => {
+          const layout = {
+            title: "Outdoor Data - Humidity (%)",
+            xaxis: { title: "Timestamp", type: "category" },
+            yaxis: { title: "Values", range: [0, 100], tick0: 0, dtick: 25 },
+            showlegend: true,
+            height: 750,
+            width: 1250,
+            xaxis: { rangeslider: { visible: true } },
+          };
+          Plotly.newPlot("mergedPlot2", traces, layout);
+        })
+        .catch((error) => console.error("Error fetching data:", error));
+
+      // Fetch data for PM2.5 (field3)
+      const promises3 = channelIds.map((channel) =>
+        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field3")
+      );
+
+      Promise.all(promises3)
+        .then((traces) => {
+          const layout = {
+            title: "Outdoor Data - PM2.5 (µg/m3)",
+            xaxis: { title: "Timestamp", type: "category" },
+            yaxis: { title: "Values", range: [0, 1000], tick0: 0, dtick: 25 },
+            showlegend: true,
+            height: 750,
+            width: 1250,
+            xaxis: { rangeslider: { visible: true } },
+          };
+          Plotly.newPlot("mergedPlot3", traces, layout);
+        })
+        .catch((error) => console.error("Error fetching data:", error));
+
+      // Fetch data for PM10 (field4)
+      const promises4 = channelIds.map((channel) =>
+        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field4")
+      );
+
+      Promise.all(promises4)
+        .then((traces) => {
+          const layout = {
+            title: "Outdoor Data - PM10 (µg/m3)",
+            xaxis: { title: "Timestamp", type: "category" },
+            yaxis: { title: "Values", range: [0, 1000], tick0: 0, dtick: 25 },
+            showlegend: true,
+            height: 750,
+            width: 1250,
+            xaxis: { rangeslider: { visible: true } },
+          };
+          Plotly.newPlot("mergedPlot4", traces, layout);
+        })
+        .catch((error) => console.error("Error fetching data:", error));
+
+      // // Fetch data for NO2 (field5)
+      // const promises5 = channelIds.map((channel) =>
+      //   fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field5")
+      // );
+
+      // Promise.all(promises5)
+      //   .then((traces) => {
+      //     const layout = {
+      //       title: "Outdoor Data - Noise (dB)",
+      //       xaxis: { title: "Timestamp", type: "category" },
+      //       yaxis: { title: "Values", range: [0, 130], tick0: 0, dtick: 25 },
+      //       showlegend: true,
+      //       height: 750,
+      //       width: 1250,
+      //       xaxis: { rangeslider: { visible: true } },
+      //     };
+      //     Plotly.newPlot("mergedPlot5", traces, layout);
+      //   })
+      //   .catch((error) => console.error("Error fetching data:", error));
+    </script>
+  </body>
+</html>
