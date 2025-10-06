@@ -60,7 +60,7 @@
     </style>
   </head>
   <body>
-    <!-- Plotly Plot Container -->
+    <!-- Plotly Plot Containers -->
     <div id="mergedPlot1" class="plot-container"></div>
     <div id="mergedPlot2" class="plot-container"></div>
     <div id="mergedPlot3" class="plot-container"></div>
@@ -69,7 +69,7 @@
 
     <!-- Script for fetching and plotting data -->
     <script>
-      // Function to fetch and plot data for a given channel
+      // Function to fetch and plot data for a given channel and field
       function fetchDataAndPlot(channelId, apiKey, location, field) {
         const url = `https://api.thingspeak.com/channels/${channelId}/feeds.json?api_key=${apiKey}&results=10000`;
 
@@ -89,16 +89,17 @@
             let groupedData = {};
             filteredFeeds.forEach((feed) => {
               const timestamp = new Date(feed.created_at).getTime();
-              const interval =
-                Math.floor(timestamp / resampleInterval) * resampleInterval;
-
-              if (!groupedData[interval]) {
-                groupedData[interval] = [];
+              const interval = Math.floor(timestamp / resampleInterval) * resampleInterval;
+              const val = parseFloat(feed[field]);
+              if (!isNaN(val)) {
+                if (!groupedData[interval]) {
+                  groupedData[interval] = [];
+                }
+                groupedData[interval].push(val);
               }
-              groupedData[interval].push(parseFloat(feed[field]));
             });
 
-            // Create resampled timestamps and values
+            // Create resampled timestamps and averaged values
             const timestamps = Object.keys(groupedData).map((interval) => {
               const date = new Date(parseInt(interval));
               // Adjust for IST (UTC +5:30)
@@ -107,16 +108,16 @@
             });
 
             const values = Object.values(groupedData).map(
-              (group) =>
-                group.reduce((sum, value) => sum + value, 0) / group.length
+              (group) => group.reduce((sum, value) => sum + value, 0) / group.length
             );
 
             // Create Plotly trace for the specified field
             return {
               x: timestamps,
               y: values,
-              name: `${location}`,
-              type: "line",
+              name: location,
+              type: "scatter",
+              mode: "lines",
             };
           })
           .catch((error) =>
@@ -124,120 +125,41 @@
           );
       }
 
-      // Updated ThingSpeak channels
+      // ThingSpeak channels configurations
       const channelIds = [
         { id: "3045185", apiKey: "EIJUOIHKF8RZK3KA", label: "Node 1" },
         { id: "3045188", apiKey: "B1YBO3CROCZC02GV", label: "Node 2" },
         { id: "3045189", apiKey: "DROY0BNP5A20USMC", label: "Node 3" },
         { id: "3045192", apiKey: "MI3XQDOQ6WXJKB3P", label: "Node 4" },
-        // { id: "944545", apiKey: "L0T1ZU83RF0GK9V7", label: "Library"},
-        // { id: "944798", apiKey: "8YB4CCP2H3ULN2TW", label: "FSQ"},
-        // { id: "945028", apiKey: "FZFLE7SUCGYRYIBW", label: "Football Ground"},
-        // { id: "947311", apiKey: "60NLXBD7BWW10LRV", label: "T-Hub"},
-        // { id: "1099442", apiKey: "ZOX2IGXJYFIRESI3", label: "Pump House 3"},
-        // { id: "2266784", apiKey: "103XV3U11MJZBZ5P", label: "Pump House 4"},
       ];
 
-      // Fetch data for Temperature (field1)
-      const promises1 = channelIds.map((channel) =>
-        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field1")
-      );
+      // Helper function to plot data for a field
+      function plotField(field, containerId, title, yRange, yTitle) {
+        const promises = channelIds.map((channel) =>
+          fetchDataAndPlot(channel.id, channel.apiKey, channel.label, field)
+        );
 
-      Promise.all(promises1)
-        .then((traces) => {
-          const layout = {
-            title: "Outdoor Data - Temperature (°C)",
-            xaxis: { title: "Timestamp", type: "category" },
-            yaxis: { title: "Values", range: [0, 75], tick0: 0, dtick: 25 },
-            showlegend: true,
-            height: 750,
-            width: 1250,
-            xaxis: { rangeslider: { visible: true } },
-          };
-          Plotly.newPlot("mergedPlot1", traces, layout);
-        })
-        .catch((error) => console.error("Error fetching data:", error));
+        Promise.all(promises)
+          .then((traces) => {
+            const layout = {
+              title: title,
+              xaxis: { title: "Timestamp", type: "category", rangeslider: { visible: true } },
+              yaxis: { title: yTitle, range: yRange, tick0: yRange[0], dtick: 25 },
+              showlegend: true,
+              height: 750,
+              width: 1250,
+            };
+            Plotly.newPlot(containerId, traces, layout);
+          })
+          .catch((error) => console.error(`Error fetching data for ${title}:`, error));
+      }
 
-      // Fetch data for Humidity (field2)
-      const promises2 = channelIds.map((channel) =>
-        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field2")
-      );
-
-      Promise.all(promises2)
-        .then((traces) => {
-          const layout = {
-            title: "Outdoor Data - Humidity (%)",
-            xaxis: { title: "Timestamp", type: "category" },
-            yaxis: { title: "Values", range: [0, 100], tick0: 0, dtick: 25 },
-            showlegend: true,
-            height: 750,
-            width: 1250,
-            xaxis: { rangeslider: { visible: true } },
-          };
-          Plotly.newPlot("mergedPlot2", traces, layout);
-        })
-        .catch((error) => console.error("Error fetching data:", error));
-
-      // Fetch data for PM2.5 (field3)
-      const promises3 = channelIds.map((channel) =>
-        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field3")
-      );
-
-      Promise.all(promises3)
-        .then((traces) => {
-          const layout = {
-            title: "Outdoor Data - PM2.5 (µg/m3)",
-            xaxis: { title: "Timestamp", type: "category" },
-            yaxis: { title: "Values", range: [0, 1000], tick0: 0, dtick: 25 },
-            showlegend: true,
-            height: 750,
-            width: 1250,
-            xaxis: { rangeslider: { visible: true } },
-          };
-          Plotly.newPlot("mergedPlot3", traces, layout);
-        })
-        .catch((error) => console.error("Error fetching data:", error));
-
-      // Fetch data for PM10 (field4)
-      const promises4 = channelIds.map((channel) =>
-        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field4")
-      );
-
-      Promise.all(promises4)
-        .then((traces) => {
-          const layout = {
-            title: "Outdoor Data - PM10 (µg/m3)",
-            xaxis: { title: "Timestamp", type: "category" },
-            yaxis: { title: "Values", range: [0, 1000], tick0: 0, dtick: 25 },
-            showlegend: true,
-            height: 750,
-            width: 1250,
-            xaxis: { rangeslider: { visible: true } },
-          };
-          Plotly.newPlot("mergedPlot4", traces, layout);
-        })
-        .catch((error) => console.error("Error fetching data:", error));
-
-      // Fetch data for NO2 (field5)
-      const promises5 = channelIds.map((channel) =>
-        fetchDataAndPlot(channel.id, channel.apiKey, channel.label, "field5")
-      );
-
-      Promise.all(promises5)
-        .then((traces) => {
-          const layout = {
-            title: "Outdoor Data - Noise (dB)",
-            xaxis: { title: "Timestamp", type: "category" },
-            yaxis: { title: "Values", range: [0, 130], tick0: 0, dtick: 25 },
-            showlegend: true,
-            height: 750,
-            width: 1250,
-            xaxis: { rangeslider: { visible: true } },
-          };
-          Plotly.newPlot("mergedPlot5", traces, layout);
-        })
-        .catch((error) => console.error("Error fetching data:", error));
+      // Plot each parameter
+      plotField("field1", "mergedPlot1", "Outdoor Data - Temperature (°C)", [0, 75], "Temperature (°C)");
+      plotField("field2", "mergedPlot2", "Outdoor Data - Humidity (%)", [0, 100], "Humidity (%)");
+      plotField("field3", "mergedPlot3", "Outdoor Data - PM2.5 (µg/m³)", [0, 1000], "PM2.5 (µg/m³)");
+      plotField("field4", "mergedPlot4", "Outdoor Data - PM10 (µg/m³)", [0, 1000], "PM10 (µg/m³)");
+      plotField("field5", "mergedPlot5", "Outdoor Data - Noise (dB)", [0, 130], "Noise (dB)");
     </script>
   </body>
 </html>
-
